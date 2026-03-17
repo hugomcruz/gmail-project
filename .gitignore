@@ -1,0 +1,22 @@
+# .gitignore
+.env
+.vscode
+token.json
+token_setup.json
+credentials.json
+history_state.json
+docker-compose.deploy.yml
+docker-compose.prod.yml
+docker-compose.yml
+client_secret.json
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+

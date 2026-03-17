@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env.example
+.git/
+.gitignore
+*.md
+.pytest_cache/
+setup_pubsub.py

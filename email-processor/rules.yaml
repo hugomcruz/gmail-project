@@ -1,0 +1,112 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Email Processing Rules
+#
+# Each rule has:
+#   name        Human-readable label shown in logs
+#   enabled     true/false — disable without deleting
+#   match       all (AND) | any (OR) across conditions
+#   conditions  List of condition checks (see below)
+#   actions     List of actions to run when rule matches
+#
+# Action fields:
+#   type        Action type (upload_to_s3 | upload_to_onedrive | create_jira_task)
+#   connection  ID of a connection defined in connections.yaml (required)
+#   config      Optional action-level overrides merged on top of the connection config
+#
+# Available condition types:
+#   from_equals          exact match on From header
+#   from_contains        substring match on From header
+#   to_contains          substring match on To header
+#   subject_equals       exact match on Subject
+#   subject_contains     substring match on Subject
+#   subject_starts_with  Subject starts with value
+#   subject_ends_with    Subject ends with value
+#   body_contains        substring in plain-text body
+#   has_attachments      email has at least one attachment
+#   attachment_count_gte email has at least N attachments
+#   label_contains       Gmail labelIds list contains value
+#
+# Template placeholders for summary/description/prefix/folder:
+#   {from}  {to}  {subject}  {date}  {body}  {snippet}
+#   {attachment_names}  {attachment_count}
+#   {year}  {month}  {day}
+# ─────────────────────────────────────────────────────────────────────────────
+
+rules:
+
+  # ── Rule 1: Invoices from supplier → S3 + JIRA ────────────────────────────
+  - name: "Test a JIRA"
+    enabled: true
+    match: all   # ALL conditions must match
+    conditions:
+      - type: from_contains
+        value: "apoioaocliente@ibelectra.com"
+      - type: subject_starts_with
+        value: "A sua fatura"
+      - type: has_attachments
+    actions:
+      - type: create_jira_task
+        connection: jira-finance         # defined in connections.yaml
+        config:
+          project: "HTT"
+          issue_type: "Task"
+          summary_template: "PORTO Electricity Invoice: {subject}"
+          description_template: |
+            A new invoice has been received and requires review.
+
+            From    : {from}
+            Date    : {date}
+            Subject : {subject}
+            Files   : {attachment_names}
+
+            TODO: Update the XLSX with the payments from the Tenants. 
+          labels:
+            - invoice
+            - finance
+          priority: "Medium"
+
+  # ── Rule 2: Upload invoices to OneDrive ───────────────────────────────────
+  - name: "Save Invoice to OneDrive"
+    enabled: true
+    match: all
+    conditions:
+      - type: from_contains
+        value: "emailsample@sample.pt"
+      - type: subject_starts_with
+        value: "Invoice"
+      - type: has_attachments
+    actions:
+      - type: upload_to_onedrive
+        connection: onedrive-personal    # defined in connections.yaml
+        config:
+          folder: "invoices/{year}/{month}"
+
+  # ── Rule 3: Any attachments from a specific partner domain ────────────────
+  - name: "Attachments from partner domain"
+    enabled: false    # disabled — enable when needed
+    match: all
+    conditions:
+      - type: from_contains
+        value: "@partner.com"
+      - type: has_attachments
+    actions:
+      - type: upload_to_s3
+        connection: s3-partners          # defined in connections.yaml
+        config:
+          prefix: "partners/{year}/{month}/"
+
+  # ── Rule 4: Forward emails via Mailgun ────────────────────────────────────
+  - name: "Forward Continente emails to Mailgun"
+    enabled: true    # disabled — enable when needed
+    match: all
+    conditions:
+      - type: from_contains
+        value: ajuda@continente.pt"
+    actions:
+      - type: forward_email
+        connection: mailgun-berzuk       # defined in connections.yaml
+        config:
+          to:
+            - hugo@brightwaves.pt
+            - thuy@matcoasia.vn
+          subject_prefix: "[HEAT] "

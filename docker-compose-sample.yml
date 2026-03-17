@@ -1,0 +1,96 @@
+services:
+
+  # ── Gmail Notif Receiver ─────────────────────────────────────────────────
+  gmail-notif-receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gmail-notif-receiver
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Forward processed emails directly to email-processor via HTTP
+      EMAIL_PROCESSOR_URL: http://email-processor:8001
+      # Push mode — no pull subscriber needed
+      USE_PULL_SUBSCRIBER: "false"
+      # OAuth2 callback URL — must match a redirect URI registered in Google Cloud Console.
+      # In production replace localhost with your public host/domain.
+      GMAIL_OAUTH_REDIRECT_URI: https://your.url/gmail/auth/callback
+      # Persist OAuth token in postgres so it survives container rebuilds
+      DATABASE_URL: postgresql://user:password@postgres:5432/emailprocessor
+    depends_on:
+      email-processor:
+        condition: service_started
+      postgres:
+        condition: service_started
+    networks:
+      - app-net
+    environment:
+      # Gmail OAuth2 client secret — paste the full JSON content of
+      # client_secret.json here (single line, no newlines).
+      # Once saved to the database on first start it is no longer required.
+      GMAIL_CLIENT_SECRET_JSON: ${GMAIL_CLIENT_SECRET_JSON:-}
+
+  # ── PostgreSQL (rules storage) ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: emailprocessor
+      POSTGRES_USER: emailprocessor
+      POSTGRES_PASSWORD: emailprocessor
+    networks:
+      - app-net
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # ── Rules UI (React SPA served via serve) ───────────────────────────────────
+  rules-ui:
+    build:
+      context: ./email-processor/rules-ui
+    container_name: rules-ui
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - app-net
+    depends_on:
+      - email-processor
+
+  # ── Email Processor (rules engine → S3 + JIRA) ──────────────────────────────
+  email-processor:
+    build:
+      context: ./email-processor
+      dockerfile: Dockerfile
+    container_name: email-processor
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./email-processor/.env
+    environment:
+      # Use the Docker service name instead of localhost
+      DATABASE_URL: postgresql://user:password@postgres:5432/emailprocessor
+    depends_on:
+      postgres:
+        condition: service_started
+    networks:
+      - app-net
+    volumes:
+      # Mount rules.yaml so rules can be edited without rebuilding the image
+      - ./email-processor/rules.yaml:/app/rules.yaml
+      # Mount connections.yaml (credentials for S3, JIRA, OneDrive)
+      - ./email-processor/connections.yaml:/app/connections.yaml
+      # Mount OneDrive token cache (created by setup_onedrive.py)
+      #- ./email-processor/onedrive_token_cache.json:/app/onedrive_token_cache.json
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  postgres_data:

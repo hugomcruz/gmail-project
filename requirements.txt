@@ -1,0 +1,25 @@
+# Web framework
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# Settings management
+pydantic-settings>=2.2.0
+
+# Google APIs
+google-api-python-client>=2.125.0
+google-auth>=2.29.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+
+# HTTP client (used internally by Google libraries)
+httplib2>=0.22.0
+
+# Google Cloud Pub/Sub
+google-cloud-pubsub>=2.21.0
+
+# Direct HTTP forwarding to email-processor
+requests>=2.31.0
+
+# PostgreSQL — persists OAuth token across restarts
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
