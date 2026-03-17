@@ -2,10 +2,6 @@ name: Build Rules UI and Push to Harbor
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'email-processor/rules-ui/**'
-      - '.github/workflows/build-rules-ui.yml'
   
 env:
   REGISTRY: harbor.bnov.net
@@ -39,7 +35,8 @@ jobs:
       - name: Build and push (multi-arch)
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./email-processor/rules-ui
+          file: ./email-processor/rules-ui/Dockerfile
           platforms: linux/arm64
           push: true
           tags: |

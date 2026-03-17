@@ -2,10 +2,6 @@ name: Build Email Processor and Push to Harbor
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'email-processor/**'
-      - '.github/workflows/build-email-processor.yml'
   
 env:
   REGISTRY: harbor.bnov.net
@@ -39,7 +35,8 @@ jobs:
       - name: Build and push (multi-arch)
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./email-processor
+          file: ./email-processor/Dockerfile
           platforms: linux/arm64
           push: true
           tags: |
