@@ -1,4 +1,4 @@
-name: Build and Push to Harbor
+name: Build Email Processor and Push to Harbor
 
 on:
   workflow_dispatch:
