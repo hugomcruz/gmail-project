@@ -2,10 +2,6 @@ name: Build Notif Receiver and Push to Harbor
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '**'
-      - '.github/workflows/build-email-notif-receiver.yml'
   
 env:
   REGISTRY: harbor.bnov.net
