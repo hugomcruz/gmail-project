@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'email-processor/**'
-      - '.github/workflows/build-email-processor.yml'
+      - '**'
+      - '.github/workflows/build-email-notif-receiver.yml'
   
 env:
   REGISTRY: harbor.bnov.net
