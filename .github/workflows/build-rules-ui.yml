@@ -6,8 +6,8 @@ on:
 env:
   REGISTRY: harbor.bnov.net
   PROJECT: gmail
-  APP_NAME: gmail-project-email-processor
-  FULL_IMAGE: harbor.bnov.net/gmail/gmail-project-email-processor
+  APP_NAME: gmail-project-rules-ui
+  FULL_IMAGE: harbor.bnov.net/gmail/gmail-project-rules-ui
 
 jobs:
   build:
