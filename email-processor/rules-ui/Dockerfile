@@ -5,7 +5,7 @@ WORKDIR /ui
 COPY package.json ./
 RUN npm install
 
-COPY . ./email-processor/rules-ui
+COPY . .
 RUN npm run build
 
 # ── Stage 2: Serve static files ──────────────────────────────────────────────
