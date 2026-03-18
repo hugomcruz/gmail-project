@@ -37,7 +37,7 @@ jobs:
         with:
           context: ./email-processor/rules-ui
           file: ./email-processor/rules-ui/Dockerfile
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.FULL_IMAGE }}:build-${{ github.run_number }}
