@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     def watched_labels(self) -> list[str]:
         return [lbl.strip() for lbl in self.gmail_watched_labels.split(",") if lbl.strip()]
 
+    # Public HTTPS base URL of this service (e.g. https://emailprocess.berzuk.com).
+    # When set (and use_pull_subscriber is False), the app will automatically
+    # call modify_push_config at startup to register the push endpoint with GCP.
+    # Leave empty to skip auto-registration.
+    public_url: str = ""
+
     # Set to True when running locally (no public URL available).
     # The app will pull messages from Pub/Sub instead of receiving pushes.
     use_pull_subscriber: bool = False

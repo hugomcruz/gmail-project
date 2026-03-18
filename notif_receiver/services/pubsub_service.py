@@ -12,6 +12,42 @@ from notif_receiver.models import GmailNotification, PubSubEnvelope
 logger = logging.getLogger(__name__)
 
 
+def configure_push_subscription() -> None:
+    """
+    Register the push endpoint with the GCP Pub/Sub subscription.
+
+    Uses Application Default Credentials (ADC) — set GOOGLE_APPLICATION_CREDENTIALS
+    to a service-account key file, or let the GCP metadata server provide them
+    automatically on Cloud Run / GKE / serverless environments.
+
+    Does nothing if PUBLIC_URL is not configured.
+    """
+    settings = get_settings()
+    if not settings.public_url:
+        logger.info("PUBLIC_URL not set — skipping automatic push-subscription registration.")
+        return
+
+    from google.cloud import pubsub_v1
+
+    public_url = settings.public_url.rstrip("/")
+    push_endpoint = f"{public_url}/pubsub/push?token={settings.pubsub_verification_token}"
+    sub_path = (
+        f"projects/{settings.google_cloud_project_id}"
+        f"/subscriptions/{settings.pubsub_subscription_name}"
+    )
+
+    logger.info("Registering Pub/Sub push endpoint: %s", push_endpoint)
+    subscriber = pubsub_v1.SubscriberClient()  # uses ADC automatically
+    with subscriber:
+        subscriber.modify_push_config(
+            request={
+                "subscription": sub_path,
+                "push_config": {"push_endpoint": push_endpoint},
+            }
+        )
+    logger.info("Pub/Sub push endpoint registered successfully.")
+
+
 def _load_last_history_id() -> str | None:
     """Load the last processed historyId from the database."""
     from notif_receiver.services.token_store import load_history_id

@@ -20,7 +20,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from app.config import get_settings
+from notif_receiver.config import get_settings
 
 SETUP_TOKEN_FILE = "token_setup.json"
 SETUP_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]

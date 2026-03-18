@@ -31,8 +31,15 @@ async def lifespan(app: FastAPI):
     # Start the notification worker (drains in-process queue via thread pool)
     from notif_receiver.services import notification_worker
     from notif_receiver.services import watch_renewer
+    from notif_receiver.services.pubsub_service import configure_push_subscription
     await notification_worker.start()
     await watch_renewer.start()
+
+    if not settings.use_pull_subscriber:
+        try:
+            configure_push_subscription()
+        except Exception:
+            logger.exception("Failed to register Pub/Sub push endpoint — continuing anyway.")
 
     if settings.use_pull_subscriber:
         from notif_receiver.services.pull_subscriber import start_pull_subscriber, stop_pull_subscriber
