@@ -32,12 +32,12 @@ jobs:
           password: ${{ secrets.HARBOR_PASSWORD }}
 
 
-      - name: Build and push (multi-arch)
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: ./notif_receiver
-          file: ./notif_receiver/Dockerfile
-          platforms: linux/arm64
+          #file: ./notif_receiver/Dockerfile
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.FULL_IMAGE }}:build-${{ github.run_number }}
