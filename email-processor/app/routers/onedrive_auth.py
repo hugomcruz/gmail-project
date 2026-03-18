@@ -71,21 +71,25 @@ def _load_cache_from_db(conn_id: str) -> str | None:
 
 def _save_cache_to_db(conn_id: str, cache_data: str) -> None:
     """Persist the serialised MSAL token cache into the connection's DB record."""
-    try:
-        from app.db.database import get_session_factory
-        from app.db import crud
-        SessionLocal = get_session_factory()
-        with SessionLocal() as db:
-            conn = crud.get_connection(db, conn_id)
-            if conn:
-                fields = dict(conn.fields or {})
-                fields["_msal_cache"] = cache_data
-                crud.update_connection(db, conn_id, conn.type, fields)
-        # Reload the engine registry so the new cache is immediately available
-        from app.state import engine
-        engine.reload_connections()
-    except Exception as exc:
-        logger.warning("Could not save OneDrive token cache for '%s': %s", conn_id, exc)
+    from app.db.database import get_session_factory
+    from app.db import crud
+    SessionLocal = get_session_factory()
+    with SessionLocal() as db:
+        conn = crud.get_connection(db, conn_id)
+        if conn:
+            fields = dict(conn.fields or {})
+            fields["_msal_cache"] = cache_data
+            crud.update_connection(db, conn_id, conn.type, fields)
+            logger.info("OneDrive token cache persisted to DB for connection '%s'.", conn_id)
+        else:
+            # Connection not yet in DB (e.g. loaded only from YAML) — create it now.
+            logger.warning(
+                "Connection '%s' not found in DB during cache save — creating a new record.", conn_id
+            )
+            crud.create_connection(db, conn_id, "onedrive", {"_msal_cache": cache_data})
+    # Reload registry so the refreshed cache is immediately available
+    from app.state import engine
+    engine.reload_connections()
 
 
 def _auth_thread(conn_id: str, client_id: str, flow: dict) -> None:
@@ -105,13 +109,21 @@ def _auth_thread(conn_id: str, client_id: str, flow: dict) -> None:
         result = app.acquire_token_by_device_flow(flow)
 
         if "access_token" in result:
-            _save_cache_to_db(conn_id, cache.serialize())
-            logger.info("OneDrive auth successful for connection '%s', token saved to DB", conn_id)
-            with _state_lock:
-                _auth_state[conn_id] = {
-                    "status": "success",
-                    "message": "Authentication successful. Token saved.",
-                }
+            try:
+                _save_cache_to_db(conn_id, cache.serialize())
+                logger.info("OneDrive auth successful for connection '%s', token saved to DB", conn_id)
+                with _state_lock:
+                    _auth_state[conn_id] = {
+                        "status": "success",
+                        "message": "Authentication successful. Token saved.",
+                    }
+            except Exception as save_exc:
+                logger.error("OneDrive auth succeeded but token save FAILED for '%s': %s", conn_id, save_exc)
+                with _state_lock:
+                    _auth_state[conn_id] = {
+                        "status": "error",
+                        "message": f"Authenticated but failed to save token: {save_exc}",
+                    }
         else:
             error = result.get("error_description") or result.get("error") or "Unknown error"
             logger.error("OneDrive auth failed for '%s': %s", conn_id, error)
@@ -128,19 +140,30 @@ def _auth_thread(conn_id: str, client_id: str, flow: dict) -> None:
 def start_auth(conn_id: str, body: StartRequest = StartRequest()):
     """
     Initiate OneDrive device code flow.
-    Credentials are taken from `body` when provided; otherwise the saved
-    connection with `conn_id` is looked up from connections.yaml.
+    client_id is resolved in priority order:
+      1. body.client_id (UI override)
+      2. connection record's client_id field
+      3. ONEDRIVE_CLIENT_ID env var / settings
     Returns {user_code, verification_url, message, expires_at}.
     """
     # Resolve client_id
     if body.client_id:
         client_id = body.client_id
     else:
-        conn = _get_onedrive_conn(conn_id)
-        client_id = conn.get("client_id", "")
+        try:
+            conn = _get_onedrive_conn(conn_id)
+            client_id = conn.get("client_id", "")
+        except HTTPException:
+            client_id = ""
 
     if not client_id:
-        raise HTTPException(status_code=400, detail="client_id is required.")
+        client_id = get_settings().onedrive_client_id
+
+    if not client_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No OneDrive client_id configured. Set ONEDRIVE_CLIENT_ID in the server environment."
+        )
 
     with _state_lock:
         existing = _auth_state.get(conn_id, {})

@@ -33,10 +33,7 @@ const FIELD_SCHEMA: Record<string, FieldDef[]> = {
     { key: 'default_project',   label: 'Default Project',                   placeholder: 'ENG' },
     { key: 'default_issue_type',label: 'Default Issue Type',                placeholder: 'Task' },
   ],
-  onedrive: [
-    { key: 'client_id',         label: 'Azure Client ID',  required: true },
-    { key: 'token_cache',       label: 'Token Cache Path',                  placeholder: 'onedrive_token_cache.json' },
-  ],
+  onedrive: [],  // No user-editable fields — client ID is configured server-side; token is stored automatically.
   mailgun: [
     { key: 'api_key',           label: 'API Key',          required: true,  secret: true },
     { key: 'domain',            label: 'Domain',           required: true,  placeholder: 'mg.example.com' },
@@ -65,10 +62,8 @@ function connectionSummary(conn: ConnectionDetail): string {
 
 // ── OneDrive Auth Panel ───────────────────────────────────────────────────────
 
-function OneDriveAuthPanel({ connId, clientId, tokenCache }: {
+function OneDriveAuthPanel({ connId }: {
   connId: string
-  clientId?: string
-  tokenCache?: string
 }) {
   const [state, setState] = useState<OneDriveAuthState>({ status: 'idle' })
   const [copied, setCopied] = useState(false)
@@ -93,7 +88,7 @@ function OneDriveAuthPanel({ connId, clientId, tokenCache }: {
 
   const handleStart = async () => {
     try {
-      const s = await startOneDriveAuth(connId, clientId, tokenCache)
+      const s = await startOneDriveAuth(connId)
       setState(s)
       if (s.status === 'pending') startPolling()
     } catch (e: unknown) {
@@ -127,20 +122,12 @@ function OneDriveAuthPanel({ connId, clientId, tokenCache }: {
       </div>
 
       {state.status === 'idle' && (
-        clientId?.trim()
-          ? (
-            <button
-              onClick={handleStart}
-              className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
-            >
-              Connect OneDrive
-            </button>
-          )
-          : (
-            <p className="text-xs text-gray-500 text-center py-1">
-              Fill in <span className="text-gray-400">Client ID</span> above to enable sign-in.
-            </p>
-          )
+        <button
+          onClick={handleStart}
+          className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
+        >
+          Connect OneDrive
+        </button>
       )}
 
       {state.status === 'pending' && (
@@ -355,8 +342,6 @@ function ConnectionModal({ conn, onSave, onClose }: ModalProps) {
           {type === 'onedrive' && (
             <OneDriveAuthPanel
               connId={isEditing ? conn!.id : (id.trim() || '__new__')}
-              clientId={fields.client_id}
-              tokenCache={fields.token_cache}
             />
           )}
         </div>
