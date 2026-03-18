@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # Leave empty to skip auto-registration.
     public_url: str = ""
 
+    # GCP service account key JSON (full file content as a single-line string).
+    # Used by configure_push_subscription() to authenticate with GCP Pub/Sub.
+    # If not set, Application Default Credentials (ADC) are used instead.
+    gcp_service_account_json: str = ""
+
     # Set to True when running locally (no public URL available).
     # The app will pull messages from Pub/Sub instead of receiving pushes.
     use_pull_subscriber: bool = False

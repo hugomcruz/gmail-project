@@ -37,7 +37,19 @@ def configure_push_subscription() -> None:
     )
 
     logger.info("Registering Pub/Sub push endpoint: %s", push_endpoint)
-    subscriber = pubsub_v1.SubscriberClient()  # uses ADC automatically
+
+    credentials = None
+    if settings.gcp_service_account_json:
+        import json as _json
+        from google.oauth2 import service_account
+        sa_info = _json.loads(settings.gcp_service_account_json)
+        credentials = service_account.Credentials.from_service_account_info(
+            sa_info,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        logger.info("Using GCP_SERVICE_ACCOUNT_JSON credentials.")
+
+    subscriber = pubsub_v1.SubscriberClient(credentials=credentials)  # None = ADC
     with subscriber:
         subscriber.modify_push_config(
             request={
