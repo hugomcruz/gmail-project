@@ -68,20 +68,17 @@ def get_action_types():
 
 
 @router.get("/meta/connections")
-def get_connections():
+def get_connections(db: Session = Depends(get_db)):
     """Return all connection IDs and types from the database."""
-    try:
-        conns = []
-        for conn_id in engine.registry.all_ids():
-            conn = engine.registry.get(conn_id)
-            conns.append({
-                "id": conn_id,
-                "type": conn.get("type"),
-                "label": f"{conn_id} ({conn.get('type')})",
-            })
-        return conns
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    rows = crud_get_connections(db)
+    return [
+        {
+            "id": row.id,
+            "type": row.type,
+            "label": f"{row.id} ({row.type})",
+        }
+        for row in rows
+    ]
 
 
 # ── Rules CRUD ───────────────────────────────────────────────────────────────
