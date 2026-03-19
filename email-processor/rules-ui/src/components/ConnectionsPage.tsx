@@ -66,6 +66,7 @@ function OneDriveAuthPanel({ connId }: {
   connId: string
 }) {
   const [state, setState] = useState<OneDriveAuthState>({ status: 'idle' })
+  const [checking, setChecking] = useState(true)
   const [copied, setCopied] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -74,6 +75,19 @@ function OneDriveAuthPanel({ connId }: {
   }
 
   useEffect(() => () => stopPolling(), [])
+
+  // On mount, silently probe whether the token is already valid.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const s = await startOneDriveAuth(connId)
+        if (!cancelled) setState(s)
+      } catch { /* no token yet — leave as idle */ }
+      if (!cancelled) setChecking(false)
+    })()
+    return () => { cancelled = true }
+  }, [connId])
 
   const startPolling = () => {
     stopPolling()
@@ -99,6 +113,7 @@ function OneDriveAuthPanel({ connId }: {
   const handleReset = async () => {
     stopPolling()
     await clearOneDriveAuthStatus(connId)
+    setChecking(false)
     setState({ status: 'idle' })
   }
 
@@ -116,12 +131,22 @@ function OneDriveAuthPanel({ connId }: {
         <p className="text-sm font-medium text-gray-300">OneDrive Sign-In</p>
         {(state.status === 'success' || state.status === 'error') && (
           <button onClick={handleReset} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-            Reset
+            Re-authenticate
           </button>
         )}
       </div>
 
-      {state.status === 'idle' && (
+      {checking && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 py-1">
+          <svg className="animate-spin h-3.5 w-3.5 text-gray-400" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          Checking token…
+        </div>
+      )}
+
+      {!checking && state.status === 'idle' && (
         <button
           onClick={handleStart}
           className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium transition-colors"
@@ -237,7 +262,16 @@ function ConnectionModal({ conn, onSave, onClose }: ModalProps) {
       if (isEditing) {
         await updateConnection(conn.id, payload)
       } else {
-        await createConnection(payload)
+        try {
+          await createConnection(payload)
+        } catch (e: unknown) {
+          // Auth flow may have already created a stub record — fall back to update.
+          if (String(e).includes('409')) {
+            await updateConnection(payload.id, payload)
+          } else {
+            throw e
+          }
+        }
       }
       onSave()
     } catch (e: unknown) {
@@ -338,11 +372,13 @@ function ConnectionModal({ conn, onSave, onClose }: ModalProps) {
             )
           })}
 
-          {/* OneDrive auth panel */}
+          {/* OneDrive auth panel — only available after the connection is saved */}
           {type === 'onedrive' && (
-            <OneDriveAuthPanel
-              connId={isEditing ? conn!.id : (id.trim() || '__new__')}
-            />
+            isEditing
+              ? <OneDriveAuthPanel connId={conn!.id} />
+              : <p className="text-xs text-gray-500 text-center py-1 border border-gray-700 rounded-lg p-3">
+                  Save the connection first, then re-open it to authenticate with OneDrive.
+                </p>
           )}
         </div>
 
