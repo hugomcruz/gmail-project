@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 REQUIRED_FIELDS: dict[str, list[str]] = {
     "s3": ["bucket"],
     "jira": ["url", "user", "token"],
-    "onedrive": ["client_id"],
+    "onedrive": [],  # client_id is configured server-side via ONEDRIVE_CLIENT_ID env var
     "mailgun": ["api_key", "domain", "sender_address"],
 }
 
