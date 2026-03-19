@@ -12,6 +12,7 @@ Upload strategy:
 """
 
 import logging
+import re
 from typing import Any
 
 import msal
@@ -23,6 +24,15 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 AUTHORITY = "https://login.microsoftonline.com/consumers"
 SCOPES = ["Files.ReadWrite"]
 CHUNK_SIZE = 4 * 1024 * 1024  # 4 MB
+
+# Characters that are illegal in OneDrive/SharePoint filenames or that the
+# Graph API interprets as path separators.  Replace them with a safe substitute.
+_ILLEGAL_FILENAME_RE = re.compile(r'[/\\:|*?"<>]')
+
+
+def _sanitize_filename(name: str) -> str:
+    """Replace characters that are illegal or path-significant in OneDrive filenames."""
+    return _ILLEGAL_FILENAME_RE.sub("-", name)
 
 
 def _get_token(cache_data: str | None, client_id: str) -> tuple[str, str | None]:
@@ -98,10 +108,14 @@ def upload_bytes(
 
     token, updated_cache = _get_token(token_cache_data, client_id)
 
+    # Sanitize the filename to remove characters that OneDrive interprets as
+    # path separators or that are illegal in filenames (e.g. "FT/2014.pdf" → "FT-2014.pdf").
+    safe_filename = _sanitize_filename(remote_path.lstrip("/"))
+
     # Build full remote path
-    path = remote_path.lstrip("/")
+    path = safe_filename
     if folder:
-        path = f"{folder.rstrip('/')}/{path}"
+        path = f"{folder.rstrip('/')}/{safe_filename}"
 
     logger.debug("Uploading %d bytes to OneDrive path '%s'", len(data), path)
 
