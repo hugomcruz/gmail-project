@@ -14,6 +14,8 @@ import logging
 from typing import Any, TYPE_CHECKING
 from datetime import datetime
 
+from app.config import get_settings
+
 if TYPE_CHECKING:
     from app.rules.connections import ConnectionRegistry
 
@@ -168,6 +170,12 @@ def _upload_to_onedrive(config: dict[str, Any], email: dict[str, Any]) -> dict[s
     conn_id = config.get("id", "")
     # Token cache is stored in the DB connection's fields as "_msal_cache"
     cache_data: str | None = config.get("_msal_cache") or None
+    # client_id may be in the connection config or fall back to server settings
+    client_id: str = config.get("client_id") or get_settings().onedrive_client_id
+    if not client_id:
+        raise ValueError(
+            "No OneDrive client_id available. Set ONEDRIVE_CLIENT_ID in the server environment."
+        )
 
     uploaded = []
     for att in attachments:
@@ -186,7 +194,7 @@ def _upload_to_onedrive(config: dict[str, Any], email: dict[str, Any]) -> dict[s
             remote_path=filename,
             content_type=mime_type,
             folder=folder or None,
-            client_id=config["client_id"],
+            client_id=client_id,
             token_cache_data=cache_data,
         )
         # If token was silently refreshed, persist the new cache to DB
