@@ -19,4 +19,11 @@ venv/
 dist/
 build/
 *.egg-info/
-
+node_modules/
+rules-ui/node_modules/
+rules-ui/dist/
+rules-ui/build/
+rules-ui/.env
+rules-ui/.env.local
+rules-ui/.env.development
+rules-ui/.env.production   
