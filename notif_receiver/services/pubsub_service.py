@@ -167,6 +167,7 @@ def process_notification(notification: GmailNotification) -> dict[str, Any]:
             if email is None:
                 # Skipped — DRAFT, SENT, or unwatched label
                 continue
+            email.setdefault("provider", "gmail")
         except Exception as exc:  # noqa: BLE001
             logger.warning("Could not fetch message %s from Gmail: %s", msg_id, exc)
             continue

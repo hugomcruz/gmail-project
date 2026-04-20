@@ -20,6 +20,7 @@ class Rule(Base):
     match: Mapped[str] = mapped_column(String(10), default="all", nullable=False)  # "all" | "any"
     conditions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     actions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    folder: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
@@ -54,6 +55,7 @@ class Connection(Base):
     __tablename__ = "connections"
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    direction: Mapped[str] = mapped_column(String(20), default="outbound", nullable=False)
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     fields: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
@@ -63,7 +65,7 @@ class Connection(Base):
 
     def to_registry_dict(self) -> dict:
         """Return a flat dict for the ConnectionRegistry (id + type + all fields merged)."""
-        return {"id": self.id, "type": self.type, **(self.fields or {})}
+        return {"id": self.id, "direction": self.direction, "type": self.type, **(self.fields or {})}
 
 
 class ActionLog(Base):

@@ -42,13 +42,29 @@ CONDITION_TYPES = [
     {"value": "has_attachments",     "label": "Has attachments"},
     {"value": "attachment_count_gte","label": "Attachment count ≥"},
     {"value": "label_contains",      "label": "Label contains"},
+    {"value": "source_connection_equals", "label": "Source connection equals"},
+    {"value": "source_provider_equals", "label": "Source provider equals"},
 ]
 
 ACTION_TYPES = [
-    {"value": "upload_to_s3",     "label": "Upload to S3"},
-    {"value": "upload_to_onedrive","label": "Upload to OneDrive"},
-    {"value": "create_jira_task", "label": "Create JIRA task"},
-    {"value": "forward_email",    "label": "Forward email"},
+    {"value": "upload_to_s3",          "label": "Upload to S3"},
+    {"value": "upload_to_onedrive",    "label": "Upload to OneDrive (Personal)"},
+    {"value": "upload_to_onedrive365", "label": "Upload to OneDrive 365 / SharePoint"},
+    {"value": "create_jira_task",      "label": "Create JIRA task"},
+    {"value": "forward_email",         "label": "Forward email"},
+]
+
+INBOUND_CONNECTION_TYPES = [
+    {"value": "gmail", "label": "Gmail"},
+    {"value": "outlook", "label": "Outlook"},
+]
+
+OUTBOUND_CONNECTION_TYPES = [
+    {"value": "s3",          "label": "S3"},
+    {"value": "jira",        "label": "Jira"},
+    {"value": "onedrive",    "label": "OneDrive (Personal)"},
+    {"value": "onedrive365", "label": "OneDrive 365 / SharePoint"},
+    {"value": "mailgun",     "label": "Mailgun"},
 ]
 
 # conditions that don't need a value
@@ -67,6 +83,23 @@ def get_action_types():
     return ACTION_TYPES
 
 
+@router.get("/meta/connection-types")
+def get_connection_types():
+    return {
+        "inbound": INBOUND_CONNECTION_TYPES,
+        "outbound": OUTBOUND_CONNECTION_TYPES,
+    }
+
+
+@router.get("/meta/server-config")
+def get_server_config():
+    """Return non-sensitive server configuration that the UI needs to pre-populate forms."""
+    s = get_settings()
+    return {
+        "azure_client_id": s.outlook_client_id or s.onedrive_client_id or "",
+    }
+
+
 @router.get("/meta/connections")
 def get_connections(db: Session = Depends(get_db)):
     """Return all connection IDs and types from the database."""
@@ -74,8 +107,9 @@ def get_connections(db: Session = Depends(get_db)):
     return [
         {
             "id": row.id,
+            "direction": row.direction,
             "type": row.type,
-            "label": f"{row.id} ({row.type})",
+            "label": f"{row.id} ({row.direction} / {row.type})",
         }
         for row in rows
     ]
@@ -168,14 +202,34 @@ def import_yaml(db: Session = Depends(get_db), rules_file: str = "rules.yaml"):
 
 class ConnectionPayload(BaseModel):
     id: str
+    direction: str
     type: str
     # All other fields are stored verbatim (bucket, url, token, etc.)
     fields: dict[str, Any] = {}
 
 
 def _to_payload(conn) -> dict:
-    """Convert a Connection DB row to a response dict."""
-    return {"id": conn.id, "type": conn.type, "fields": conn.fields or {}}
+    """Convert a Connection DB row to a response dict, stripping internal fields."""
+    fields = {k: v for k, v in (conn.fields or {}).items() if not k.startswith("_")}
+    return {
+        "id": conn.id,
+        "direction": conn.direction,
+        "type": conn.type,
+        "fields": fields,
+    }
+
+
+# Internal field prefixes that must never be overwritten by the UI.
+_INTERNAL_FIELD_PREFIX = "_"
+
+
+def _merge_fields(existing_fields: dict, new_fields: dict) -> dict:
+    """Merge user-supplied fields on top of existing fields, preserving internal fields."""
+    merged = dict(existing_fields or {})
+    # Remove old user-editable fields (non-internal) and replace with new values
+    merged = {k: v for k, v in merged.items() if k.startswith(_INTERNAL_FIELD_PREFIX)}
+    merged.update(new_fields)
+    return merged
 
 
 @router.get("/connections")
@@ -189,17 +243,23 @@ def create_connection(payload: ConnectionPayload, db: Session = Depends(get_db))
     """Add a new connection to the database."""
     if crud_get_connection(db, payload.id):
         raise HTTPException(status_code=409, detail=f"Connection '{payload.id}' already exists.")
-    conn = crud_create_connection(db, payload.id, payload.type, payload.fields)
+    conn = crud_create_connection(db, payload.id, payload.direction, payload.type, payload.fields)
     engine.reload_connections()
     return _to_payload(conn)
 
 
 @router.put("/connections/{conn_id}")
 def update_connection(conn_id: str, payload: ConnectionPayload, db: Session = Depends(get_db)):
-    """Update an existing connection in the database."""
-    conn = crud_update_connection(db, conn_id, payload.type, payload.fields)
-    if conn is None:
+    """Update an existing connection in the database.
+
+    Internal fields (prefixed with '_', e.g. _msal_cache, _outlook_last_sync)
+    are preserved from the existing record so that UI saves never wipe auth tokens.
+    """
+    existing = crud_get_connection(db, conn_id)
+    if existing is None:
         raise HTTPException(status_code=404, detail=f"Connection '{conn_id}' not found.")
+    merged = _merge_fields(existing.fields, payload.fields)
+    conn = crud_update_connection(db, conn_id, payload.direction, payload.type, merged)
     engine.reload_connections()
     return _to_payload(conn)
 

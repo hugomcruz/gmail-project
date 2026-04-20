@@ -12,7 +12,7 @@ import UsersPage from './components/UsersPage'
 import ActivityPage from './components/ActivityPage'
 import HeatLogo from './components/HeatLogo'
 
-type Tab = 'rules' | 'connections' | 'users' | 'activity'
+type Tab = 'rules' | 'inbound' | 'outbound' | 'users' | 'activity'
 
 export default function App() {
   // ── Auth state ──────────────────────────────────────────────────────────
@@ -29,6 +29,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [editing, setEditing] = useState<Rule | null | 'new'>(null)
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set())
 
   // ── Verify stored token on mount ────────────────────────────────────────
   useEffect(() => {
@@ -131,20 +132,12 @@ export default function App() {
 
   const isAdmin = currentUser.role === 'admin'
 
-  const navItems: { id: Tab; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
+  const navItems: { id: Exclude<Tab, 'inbound' | 'outbound'>; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
     {
       id: 'rules', label: 'Rules',
       icon: (
         <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 shrink-0">
           <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-        </svg>
-      ),
-    },
-    {
-      id: 'connections', label: 'Connections',
-      icon: (
-        <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 shrink-0">
-          <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
         </svg>
       ),
     },
@@ -179,6 +172,7 @@ export default function App() {
 
         {/* Nav items */}
         <nav className="flex-1 px-3 py-4 space-y-1">
+          <p className="px-3 pb-1 text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Core</p>
           {navItems
             .filter(item => !item.adminOnly || isAdmin)
             .map(item => (
@@ -195,6 +189,38 @@ export default function App() {
                 {item.label}
               </button>
             ))}
+
+          <p className="px-3 pt-4 pb-1 text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Connections</p>
+          <button
+            onClick={() => setTab('inbound')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
+              tab === 'inbound'
+                ? 'bg-gray-800 text-white'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+            }`}
+          >
+            <span className="flex w-4 h-4 items-center justify-center shrink-0">
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z" clipRule="evenodd" />
+              </svg>
+            </span>
+            Inbound
+          </button>
+          <button
+            onClick={() => setTab('outbound')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
+              tab === 'outbound'
+                ? 'bg-gray-800 text-white'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+            }`}
+          >
+            <span className="flex w-4 h-4 items-center justify-center shrink-0">
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z" clipRule="evenodd" />
+              </svg>
+            </span>
+            Outbound
+          </button>
         </nav>
 
         {/* User info + logout */}
@@ -252,25 +278,32 @@ export default function App() {
                   {isAdmin && <p className="text-sm mt-2">Click <strong>+ New Rule</strong> to create one.</p>}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {rules.map(rule => (
-                    <RuleCard
-                      key={rule.id}
-                      rule={rule}
-                      isAdmin={isAdmin}
-                      onToggle={() => handleToggle(rule.id)}
-                      onEdit={() => setEditing(rule)}
-                      onDelete={() => handleDelete(rule.id, rule.name)}
-                    />
-                  ))}
-                </div>
+                <RuleGroups
+                  rules={rules}
+                  isAdmin={isAdmin}
+                  collapsedFolders={collapsedFolders}
+                  onToggleFolder={folder =>
+                    setCollapsedFolders(prev => {
+                      const next = new Set(prev)
+                      next.has(folder) ? next.delete(folder) : next.add(folder)
+                      return next
+                    })
+                  }
+                  onToggleRule={id => handleToggle(id)}
+                  onEdit={rule => setEditing(rule)}
+                  onDelete={(id, name) => handleDelete(id, name)}
+                />
               )}
             </>
           )}
 
-          {/* ── Connections tab ───────────────────────────────────────── */}
-          {tab === 'connections' && (
-            <ConnectionsPage showToast={showToast} onConnectionsChanged={loadConnections} />
+          {/* ── Connections tabs ──────────────────────────────────────── */}
+          {(tab === 'inbound' || tab === 'outbound') && (
+            <ConnectionsPage
+              direction={tab}
+              showToast={showToast}
+              onConnectionsChanged={loadConnections}
+            />
           )}
 
           {/* ── Users tab ─────────────────────────────────────────────── */}
@@ -303,6 +336,79 @@ export default function App() {
           onClose={() => setEditing(null)}
         />
       )}
+    </div>
+  )
+}
+
+function RuleGroups({
+  rules, isAdmin, collapsedFolders, onToggleFolder, onToggleRule, onEdit, onDelete,
+}: {
+  rules: Rule[]
+  isAdmin: boolean
+  collapsedFolders: Set<string>
+  onToggleFolder: (folder: string) => void
+  onToggleRule: (id: number) => void
+  onEdit: (rule: Rule) => void
+  onDelete: (id: number, name: string) => void
+}) {
+  // Group rules: named folders first (sorted), then ungrouped last
+  const folderMap = new Map<string, Rule[]>()
+  for (const rule of rules) {
+    const key = rule.folder?.trim() || ''
+    if (!folderMap.has(key)) folderMap.set(key, [])
+    folderMap.get(key)!.push(rule)
+  }
+
+  const namedFolders = [...folderMap.keys()].filter(k => k !== '').sort((a, b) => a.localeCompare(b))
+  const groups: Array<{ label: string; key: string; rules: Rule[] }> = [
+    ...namedFolders.map(f => ({ label: f, key: f, rules: folderMap.get(f)! })),
+    ...(folderMap.has('') ? [{ label: 'Ungrouped', key: '', rules: folderMap.get('')! }] : []),
+  ]
+
+  return (
+    <div className="space-y-4">
+      {groups.map(group => {
+        const collapsed = collapsedFolders.has(group.key)
+        const isUngrouped = group.key === ''
+        return (
+          <div key={group.key} className="rounded-xl border border-gray-800 overflow-hidden">
+            <button
+              onClick={() => onToggleFolder(group.key)}
+              className="w-full flex items-center gap-2.5 px-4 py-3 bg-gray-900 hover:bg-gray-800/70 transition-colors text-left"
+            >
+              <svg
+                viewBox="0 0 20 20" fill="currentColor"
+                className={`w-4 h-4 shrink-0 text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`}
+              >
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              </svg>
+              {isUngrouped ? (
+                <span className="text-sm font-medium text-gray-500 italic">Ungrouped</span>
+              ) : (
+                <>
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 shrink-0">
+                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-gray-200">{group.label}</span>
+                </>
+              )}
+              <span className="ml-1 text-xs text-gray-600">{group.rules.length}</span>
+            </button>
+            {!collapsed && (
+              <div className="divide-y divide-gray-800/60">
+                {group.rules.map(rule => (
+                  <div key={rule.id} className="px-3 py-2">
+                    <RuleCard rule={rule} isAdmin={isAdmin}
+                      onToggle={() => onToggleRule(rule.id)}
+                      onEdit={() => onEdit(rule)}
+                      onDelete={() => onDelete(rule.id, rule.name)} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

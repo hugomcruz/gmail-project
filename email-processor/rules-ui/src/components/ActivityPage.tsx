@@ -11,10 +11,11 @@ const STATUS_STYLES: Record<string, string> = {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  upload_to_s3:      'text-orange-300',
-  upload_to_onedrive:'text-blue-300',
-  create_jira_task:  'text-indigo-300',
-  forward_email:     'text-green-300',
+  upload_to_s3:          'text-orange-300',
+  upload_to_onedrive:    'text-blue-300',
+  upload_to_onedrive365: 'text-violet-300',
+  create_jira_task:      'text-indigo-300',
+  forward_email:         'text-green-300',
 }
 
 function formatDate(iso: string) {

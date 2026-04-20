@@ -14,12 +14,14 @@ interface Props {
 const ACTION_CONNECTION_TYPE: Record<string, string> = {
   upload_to_s3: 's3',
   upload_to_onedrive: 'onedrive',
+  upload_to_onedrive365: 'onedrive365',
   create_jira_task: 'jira',
   forward_email: 'mailgun',
 }
 
 const NO_VALUE_TYPES = ['has_attachments']
 const NUMBER_VALUE_TYPES = ['attachment_count_gte']
+const SOURCE_CONNECTION_TYPES = ['source_connection_equals']
 
 function blankCondition(): Condition {
   return { type: 'subject_contains', value: '' }
@@ -70,6 +72,10 @@ function configFields(type: string, config: Record<string, unknown>, onChange: (
       return [inp('prefix', 'S3 Key Prefix', 'attachments/')]
     case 'upload_to_onedrive':
       return [inp('folder', 'Folder Path', 'Email Attachments')]
+    case 'upload_to_onedrive365':
+      return [
+        inp('folder', 'Folder Path', 'Email Attachments'),
+      ]
     case 'create_jira_task':
       return [
         inp('project', 'Project Key', 'ENG'),
@@ -103,6 +109,7 @@ function configFields(type: string, config: Record<string, unknown>, onChange: (
 
 export default function RuleEditor({ rule, conditionTypes, actionTypes, connections, onSave, onClose }: Props) {
   const [name, setName] = useState(rule?.name ?? '')
+  const [folder, setFolder] = useState(rule?.folder ?? '')
   const [enabled, setEnabled] = useState(rule?.enabled ?? true)
   const [match, setMatch] = useState<'all' | 'any'>(rule?.match ?? 'all')
   const [conditions, setConditions] = useState<Condition[]>(
@@ -113,6 +120,11 @@ export default function RuleEditor({ rule, conditionTypes, actionTypes, connecti
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const inboundConnections = connections.filter(c => c.direction === 'inbound')
+  const sourceConnectionOptions = [...inboundConnections]
+  if (!sourceConnectionOptions.some(c => c.id === 'gmail')) {
+    sourceConnectionOptions.push({ id: 'gmail', direction: 'inbound', type: 'gmail', label: 'gmail (legacy / default)' })
+  }
 
   // Close on Escape
   useEffect(() => {
@@ -142,6 +154,7 @@ export default function RuleEditor({ rule, conditionTypes, actionTypes, connecti
     if (!name.trim()) { setError('Name is required.'); return }
     const payload: RulePayload = {
       name: name.trim(), enabled, match,
+      folder: folder.trim(),
       conditions: conditions.map(c => ({
         type: c.type,
         value: c.value,
@@ -193,6 +206,16 @@ export default function RuleEditor({ rule, conditionTypes, actionTypes, connecti
               />
             </div>
 
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Folder <span className="normal-case font-normal text-gray-500">(optional)</span></label>
+              <input
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500"
+                value={folder}
+                placeholder="e.g. Finance / Invoices"
+                onChange={e => setFolder(e.target.value)}
+              />
+            </div>
+
             <div className="flex items-center gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" className="w-4 h-4 rounded accent-blue-600"
@@ -226,6 +249,7 @@ export default function RuleEditor({ rule, conditionTypes, actionTypes, connecti
               {conditions.map((cond, i) => {
                 const noVal = NO_VALUE_TYPES.includes(cond.type)
                 const numVal = NUMBER_VALUE_TYPES.includes(cond.type)
+                const sourceConnVal = SOURCE_CONNECTION_TYPES.includes(cond.type)
                 return (
                   <div key={i} className="flex items-center gap-2">
                     <select
@@ -238,13 +262,26 @@ export default function RuleEditor({ rule, conditionTypes, actionTypes, connecti
                       ))}
                     </select>
                     {!noVal && (
-                      <input
-                        className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500"
-                        type={numVal ? 'number' : 'text'}
-                        value={cond.value ?? ''}
-                        placeholder={numVal ? '1' : 'value…'}
-                        onChange={e => updateCondition(i, { value: numVal ? parseInt(e.target.value) || 0 : e.target.value })}
-                      />
+                      sourceConnVal ? (
+                        <select
+                          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500"
+                          value={String(cond.value ?? '')}
+                          onChange={e => updateCondition(i, { value: e.target.value })}
+                        >
+                          <option value="">- select inbound connection -</option>
+                          {sourceConnectionOptions.map(c => (
+                            <option key={c.id} value={c.id}>{c.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500"
+                          type={numVal ? 'number' : 'text'}
+                          value={cond.value ?? ''}
+                          placeholder={numVal ? '1' : 'value…'}
+                          onChange={e => updateCondition(i, { value: numVal ? parseInt(e.target.value) || 0 : e.target.value })}
+                        />
+                      )
                     )}
                     {noVal && <span className="flex-1 text-sm text-gray-600 italic">no value needed</span>}
                     <button
@@ -270,7 +307,7 @@ export default function RuleEditor({ rule, conditionTypes, actionTypes, connecti
             <div className="space-y-4">
               {actions.map((action, i) => {
                 const connType = ACTION_CONNECTION_TYPE[action.type]
-                const filtered = connections.filter(c => c.type === connType)
+                const filtered = connections.filter(c => c.direction === 'outbound' && c.type === connType)
                 return (
                   <div key={i} className="bg-gray-800/60 border border-gray-700/60 rounded-xl p-4 space-y-3">
                     <div className="flex items-center gap-2">

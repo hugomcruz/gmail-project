@@ -8,12 +8,11 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# ── Stage 2: Serve static files ──────────────────────────────────────────────
-FROM node:20-alpine
+# ── Stage 2: Serve static files + proxy API in Docker network ───────────────
+FROM nginx:1.27-alpine
 
-RUN npm install -g serve
-
-COPY --from=builder /ui/dist /app
+COPY --from=builder /ui/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 3000
-CMD ["serve", "-s", "/app", "-l", "3000"]
+CMD ["nginx", "-g", "daemon off;"]

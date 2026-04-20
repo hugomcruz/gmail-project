@@ -20,6 +20,10 @@ _queue: asyncio.Queue | None = None
 _executor: ThreadPoolExecutor | None = None
 _worker_task: asyncio.Task | None = None
 
+# Sentinel: set to True when an unrecoverable auth error is detected.
+# The worker pauses processing until the flag is cleared (e.g. after re-auth).
+_auth_error: bool = False
+
 
 def get_queue() -> asyncio.Queue:
     """Return the shared notification queue (created lazily on first call)."""
@@ -27,6 +31,13 @@ def get_queue() -> asyncio.Queue:
     if _queue is None:
         _queue = asyncio.Queue()
     return _queue
+
+
+def clear_auth_error() -> None:
+    """Reset the auth-error flag (call after a successful OAuth re-authorization)."""
+    global _auth_error
+    _auth_error = False
+    logger.info("Auth-error flag cleared; notification worker will resume processing.")
 
 
 async def start() -> None:
@@ -39,10 +50,16 @@ async def start() -> None:
 
 async def _drain() -> None:
     """Async task — continuously drains the notification queue."""
+    global _auth_error
     queue = get_queue()
     while True:
         notification: GmailNotification | None = None
         try:
+            if _auth_error:
+                # Auth is broken — wait a bit and re-check instead of dequeuing.
+                await asyncio.sleep(30)
+                continue
+
             notification = await queue.get()
             logger.info(
                 "Worker received notification: email=%s historyId=%s",
@@ -55,7 +72,17 @@ async def _drain() -> None:
         except asyncio.CancelledError:
             break
         except Exception as exc:
-            logger.exception("Worker failed to handle notification: %s", exc)
+            err_str = str(exc)
+            if "invalid_grant" in err_str or "Re-authorize" in err_str:
+                _auth_error = True
+                logger.error(
+                    "Gmail auth error detected — worker paused. "
+                    "Re-authorize via /gmail/auth/start then POST /gmail/auth/resume "
+                    "or restart the service. Error: %s",
+                    exc,
+                )
+            else:
+                logger.exception("Worker failed to handle notification: %s", exc)
             if notification is not None:
                 queue.task_done()
 

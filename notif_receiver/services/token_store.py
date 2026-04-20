@@ -83,6 +83,20 @@ def save_token(token_json: str) -> None:
         logger.warning("Could not save token to database: %s", exc)
 
 
+def delete_token() -> None:
+    """Remove the stored OAuth token from the database (e.g. after revocation)."""
+    try:
+        with _get_engine().connect() as conn:
+            conn.execute(
+                text("DELETE FROM gmail_oauth_tokens WHERE key = :key"),
+                {"key": _TOKEN_KEY},
+            )
+            conn.commit()
+        logger.info("Revoked/expired OAuth token deleted from database.")
+    except Exception as exc:
+        logger.warning("Could not delete token from database: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # Client secret (replaces client_secret.json volume mount)
 # ---------------------------------------------------------------------------

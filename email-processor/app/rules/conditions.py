@@ -16,6 +16,8 @@ Supported condition types:
   has_attachments      email has ≥ 1 attachment
   attachment_count_gte email has ≥ N attachments
   label_contains       labelIds list contains value
+    source_connection_equals inbound source connection ID equals value
+    source_provider_equals   inbound source provider equals value
 """
 
 import logging
@@ -99,6 +101,16 @@ def _label_contains(c, email, value, cs):
     return _norm(value, cs) in labels
 
 
+def _source_connection_equals(c, email, value, cs):
+    src = str(email.get("source_connection") or email.get("connection_id") or "")
+    return _norm(src, cs) == _norm(value, cs)
+
+
+def _source_provider_equals(c, email, value, cs):
+    src = str(email.get("source_provider") or email.get("provider") or "")
+    return _norm(src, cs) == _norm(value, cs)
+
+
 _HANDLERS = {
     "from_equals": _from_equals,
     "from_contains": _from_contains,
@@ -111,4 +123,6 @@ _HANDLERS = {
     "has_attachments": _has_attachments,
     "attachment_count_gte": _attachment_count_gte,
     "label_contains": _label_contains,
+    "source_connection_equals": _source_connection_equals,
+    "source_provider_equals": _source_provider_equals,
 }

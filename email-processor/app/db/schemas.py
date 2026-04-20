@@ -21,6 +21,7 @@ class RuleCreate(BaseModel):
     name: str = Field(..., min_length=1)
     enabled: bool = True
     match: str = Field("all", pattern="^(all|any)$")
+    folder: str = ""
     conditions: list[ConditionSchema] = Field(default_factory=list)
     actions: list[ActionSchema] = Field(default_factory=list)
 
@@ -29,6 +30,7 @@ class RuleUpdate(BaseModel):
     name: str | None = Field(None, min_length=1)
     enabled: bool | None = None
     match: str | None = Field(None, pattern="^(all|any)$")
+    folder: str | None = None
     conditions: list[ConditionSchema] | None = None
     actions: list[ActionSchema] | None = None
 
@@ -38,6 +40,7 @@ class RuleResponse(BaseModel):
     name: str
     enabled: bool
     match: str
+    folder: str
     conditions: list[dict[str, Any]]
     actions: list[dict[str, Any]]
     created_at: datetime

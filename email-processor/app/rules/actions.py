@@ -168,8 +168,9 @@ def _upload_to_onedrive(config: dict[str, Any], email: dict[str, Any]) -> dict[s
 
     folder = _render(config.get("folder", ""), email)
     conn_id = config.get("id", "")
-    # Token cache is stored in the DB connection's fields as "_msal_cache"
-    cache_data: str | None = config.get("_msal_cache") or None
+    # Always read the token cache fresh from DB — the in-memory registry may be
+    # stale if auth completed after the last registry reload.
+    cache_data: str | None = _load_msal_cache_from_db(conn_id) or config.get("_msal_cache") or None
     # client_id may be in the connection config or fall back to server settings
     client_id: str = config.get("client_id") or get_settings().onedrive_client_id
     if not client_id:
@@ -221,12 +222,113 @@ def _save_onedrive_cache(conn_id: str, cache_data: str) -> None:
             if conn:
                 fields = dict(conn.fields or {})
                 fields["_msal_cache"] = cache_data
-                crud.update_connection(db, conn_id, conn.type, fields)
+                crud.update_connection(db, conn_id, conn.direction, conn.type, fields)
         # Reload registry so the refreshed cache is available for subsequent runs
         from app.state import engine
         engine.reload_connections()
     except Exception as exc:
         logger.warning("Could not save OneDrive token cache for '%s': %s", conn_id, exc)
+
+
+def _load_msal_cache_from_db(conn_id: str) -> str | None:
+    """Read _msal_cache fresh from the DB, bypassing the in-memory registry.
+
+    The in-memory registry may be stale if auth completed after the last reload.
+    Always reading from DB guarantees we use the token that was actually saved.
+    """
+    if not conn_id:
+        return None
+    try:
+        from app.db.database import get_session_factory
+        from app.db import crud
+        SessionLocal = get_session_factory()
+        with SessionLocal() as db:
+            conn = crud.get_connection(db, conn_id)
+            if conn:
+                return (conn.fields or {}).get("_msal_cache") or None
+    except Exception as exc:
+        logger.warning("Could not load MSAL cache for '%s' from DB: %s", conn_id, exc)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# OneDrive 365 / SharePoint action
+# ---------------------------------------------------------------------------
+
+def _upload_to_onedrive365(config: dict[str, Any], email: dict[str, Any]) -> dict[str, Any]:
+    """
+    Upload every attachment to OneDrive for Business or SharePoint.
+
+    Config keys (from connection + action overrides):
+      folder     optional  Destination folder; supports {year}/{month}/{day}
+      site_url   optional  SharePoint site URL (leave blank for OneDrive for Business)
+    """
+    import base64
+    from app.services.onedrive365_service import upload_bytes
+
+    attachments = email.get("attachments", [])
+    if not attachments:
+        logger.info(
+            "upload_to_onedrive365 (conn='%s'): email id=%s has no attachments — nothing to upload.",
+            config.get("id", ""), email.get("id", ""),
+        )
+        return {"uploaded": [], "skipped_reason": "no attachments"}
+
+    folder = _render(config.get("folder", ""), email)
+    conn_id = config.get("id", "")
+    # Always read the token cache fresh from DB — the in-memory registry may be
+    # stale if auth completed after the last registry reload.
+    cache_data: str | None = _load_msal_cache_from_db(conn_id) or config.get("_msal_cache") or None
+    site_url: str = config.get("site_url") or ""
+    tenant_id: str = config.get("tenant_id") or ""
+
+    client_id: str = config.get("client_id") or get_settings().outlook_client_id or get_settings().onedrive_client_id
+    if not client_id:
+        raise ValueError(
+            "No OneDrive 365 client_id available. Set AZURE_CLIENT_ID in the server environment."
+        )
+
+    if not cache_data:
+        raise RuntimeError(
+            f"OneDrive 365 connection '{conn_id}' has no stored token. "
+            "Authenticate the connection via the Connections page first."
+        )
+
+    logger.info(
+        "upload_to_onedrive365 (conn='%s'): uploading %d attachment(s) from email id=%s",
+        conn_id, len(attachments), email.get("id", ""),
+    )
+
+    uploaded = []
+    for att in attachments:
+        filename = att.get("filename", "attachment")
+        data_b64 = att.get("data_base64", "")
+        mime_type = att.get("mimeType", "application/octet-stream")
+
+        try:
+            raw = base64.urlsafe_b64decode(data_b64 + "==")
+        except Exception as exc:
+            logger.error("Could not decode attachment '%s': %s", filename, exc)
+            continue
+
+        web_url, updated_cache = upload_bytes(
+            data=raw,
+            remote_path=filename,
+            content_type=mime_type,
+            folder=folder or None,
+            client_id=client_id,
+            tenant_id=tenant_id,
+            site_url=site_url,
+            token_cache_data=cache_data,
+        )
+        if updated_cache:
+            cache_data = updated_cache
+            _save_onedrive_cache(conn_id, updated_cache)
+
+        logger.info("OneDrive 365 uploaded '%s' → %s", filename, web_url)
+        uploaded.append({"filename": filename, "onedrive_url": web_url})
+
+    return {"uploaded": uploaded}
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +470,7 @@ def _forward_email(config: dict[str, Any], email: dict[str, Any]) -> dict[str, A
 _HANDLERS = {
     "upload_to_s3": _upload_to_s3,
     "upload_to_onedrive": _upload_to_onedrive,
+    "upload_to_onedrive365": _upload_to_onedrive365,
     "create_jira_task": _create_jira_task,
     "forward_email": _forward_email,
 }

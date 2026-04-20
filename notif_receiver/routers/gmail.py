@@ -139,6 +139,9 @@ async def google_auth_callback(code: str, state: str) -> HTMLResponse:
     try:
         complete_oauth_flow(code, state)
         _oauth_status.update({"status": "success", "message": "Authorization successful.", "state": None})
+        # Clear any auth-error backoff so the worker resumes immediately.
+        from notif_receiver.services.notification_worker import clear_auth_error
+        clear_auth_error()
         html = """<!DOCTYPE html>
 <html>
 <head><title>Google Authorization</title>
@@ -208,3 +211,19 @@ async def reset_google_auth_status() -> dict:
     """Clear the in-memory OAuth flow status back to idle."""
     _oauth_status.update({"status": "idle", "message": None, "state": None})
     return {"ok": True}
+
+
+@router.post(
+    "/auth/resume",
+    summary="Resume notification worker after re-authorization",
+    status_code=status.HTTP_200_OK,
+)
+async def resume_worker() -> dict:
+    """
+    Clear the auth-error backoff flag so the notification worker resumes
+    processing the queue.  Call this after completing a fresh OAuth flow
+    (or it is called automatically by the /auth/callback redirect).
+    """
+    from notif_receiver.services.notification_worker import clear_auth_error
+    clear_auth_error()
+    return {"ok": True, "detail": "Notification worker resumed."}

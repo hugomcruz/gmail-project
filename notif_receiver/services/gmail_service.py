@@ -5,6 +5,7 @@ import logging
 import os
 from typing import Any
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -53,8 +54,25 @@ def _get_credentials() -> Credentials:
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            save_token(creds.to_json())
+            try:
+                creds.refresh(Request())
+                save_token(creds.to_json())
+            except RefreshError as exc:
+                # invalid_grant means the refresh token was revoked or expired.
+                # Clear the stale token so the next /gmail/auth/start flow works.
+                error_data = exc.args[1] if len(exc.args) > 1 else {}
+                if isinstance(error_data, dict) and error_data.get("error") == "invalid_grant":
+                    logger.error(
+                        "Gmail refresh token has been revoked or expired. "
+                        "Re-authorization is required. Visit /gmail/auth/start "
+                        "to complete a new OAuth flow."
+                    )
+                    from notif_receiver.services.token_store import delete_token
+                    delete_token()
+                raise RuntimeError(
+                    "Gmail OAuth token is invalid (invalid_grant). "
+                    "Re-authorize by visiting /gmail/auth/start."
+                ) from exc
         else:
             from notif_receiver.services.token_store import load_client_secret
             client_secret_json = load_client_secret()

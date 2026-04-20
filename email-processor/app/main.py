@@ -20,9 +20,12 @@ from app.config import get_settings
 from app.state import engine
 from app.routers.rules_api import router as api_router
 from app.routers.onedrive_auth import router as onedrive_auth_router
+from app.routers.inbound_auth import router as inbound_auth_router
+from app.routers.outlook_webhook import router as outlook_webhook_router
 from app.routers.users import router as users_router
 from app.db.database import init_db, get_session_factory
 from app.db import crud
+from app.services.email_processing import process_inbound_email
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,7 +55,14 @@ async def lifespan(_: FastAPI):
     # Switch engine to DB mode
     engine.enable_db_mode()
 
+    from app.services import outlook_poller, outlook_webhook_renewer
+    await outlook_poller.start()
+    await outlook_webhook_renewer.start()
+
     yield  # app is running
+
+    await outlook_webhook_renewer.stop()
+    await outlook_poller.stop()
 
     logger.info("Email processor stopped.")
 
@@ -66,6 +76,8 @@ app = FastAPI(title="HEAT Email Processor", lifespan=lifespan)
 # CRUD + metadata API
 app.include_router(api_router)
 app.include_router(onedrive_auth_router)
+app.include_router(inbound_auth_router)
+app.include_router(outlook_webhook_router)
 app.include_router(users_router)
 
 
@@ -106,37 +118,7 @@ async def process_email_internal(email: dict[str, Any]):
     Called by the notif-receiver service with a fully-fetched email dict.
     Runs the email through the rules engine synchronously and returns a summary.
     """
-    email_id = email.get("id", "?")
-    subject = email.get("subject", "(no subject)")
-    logger.info("Received email id=%s | subject='%s'", email_id, subject)
-
-    results = engine.process(email)
-    if results:
-        SessionLocal = get_session_factory()
-        with SessionLocal() as db:
-            for r in results:
-                actions_summary = ", ".join(
-                    f"{a['action']}={a['status']}" for a in r["actions"]
-                )
-                logger.info("Rule '%s' → %s", r["rule"], actions_summary)
-                for a in r["actions"]:
-                    crud.create_action_log(
-                        db=db,
-                        email_id=email_id,
-                        email_subject=subject,
-                        email_from=email.get("from", ""),
-                        email_date=email.get("date"),
-                        rule_name=r["rule"],
-                        action_type=a.get("action", ""),
-                        connection_id=a.get("connection"),
-                        status=a.get("status", "unknown"),
-                        detail={k: v for k, v in a.items() if k not in ("action", "status", "connection")},
-                    )
-    else:
-        logger.info("No rules matched for email id=%s | subject='%s' | from='%s'",
-                    email_id, subject, email.get("from", ""))
-
-    return {"processed": True, "email_id": email_id, "rules_matched": len(results)}
+    return process_inbound_email(email)
 
 
 @app.get("/rules")

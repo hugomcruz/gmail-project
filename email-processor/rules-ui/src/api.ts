@@ -18,6 +18,7 @@ export interface Rule {
   name: string
   enabled: boolean
   match: 'all' | 'any'
+  folder: string
   conditions: Condition[]
   actions: Action[]
   created_at: string
@@ -28,6 +29,7 @@ export interface RulePayload {
   name: string
   enabled: boolean
   match: 'all' | 'any'
+  folder: string
   conditions: Condition[]
   actions: Action[]
 }
@@ -42,8 +44,11 @@ export interface ActionType {
   label: string
 }
 
+export type ConnectionDirection = 'inbound' | 'outbound'
+
 export interface Connection {
   id: string
+  direction: ConnectionDirection
   type: string
   label: string
 }
@@ -51,8 +56,19 @@ export interface Connection {
 // Full connection detail — used in the Connections editor
 export interface ConnectionDetail {
   id: string
+  direction: ConnectionDirection
   type: string
   fields: Record<string, string | boolean | number | null>
+}
+
+export interface ConnectionTypeOption {
+  value: string
+  label: string
+}
+
+export interface ConnectionTypeGroups {
+  inbound: ConnectionTypeOption[]
+  outbound: ConnectionTypeOption[]
 }
 
 // ── Auth / Users ──────────────────────────────────────────────────────────────
@@ -172,6 +188,8 @@ export const reloadEngine = () =>
 export const getConditionTypes = () => request<ConditionType[]>('/api/meta/condition-types')
 export const getActionTypes = () => request<ActionType[]>('/api/meta/action-types')
 export const getConnections = () => request<Connection[]>('/api/meta/connections')
+export const getConnectionTypes = () => request<ConnectionTypeGroups>('/api/meta/connection-types')
+export const getServerConfig = () => request<{ azure_client_id: string }>('/api/meta/server-config')
 
 // ── Connections CRUD ──────────────────────────────────────────────────────────
 
@@ -259,3 +277,38 @@ export const getOneDriveAuthStatus = (connId: string) =>
   request<OneDriveAuthState>(`/api/onedrive-auth/${encodeURIComponent(connId)}/status`)
 export const clearOneDriveAuthStatus = (connId: string) =>
   request<void>(`/api/onedrive-auth/${encodeURIComponent(connId)}/status`, { method: 'DELETE' })
+
+// ── Inbound Auth (Gmail / Outlook) ─────────────────────────────────────────
+
+export interface InboundAuthState {
+  status: 'idle' | 'pending' | 'success' | 'error'
+  message?: string
+  auth_url?: string
+  user_code?: string
+  verification_url?: string
+  expires_at?: string
+  token_status?: 'valid' | 'expired' | 'missing' | 'invalid' | 'error'
+  token_expiry?: string | null
+  scopes?: string[]
+  provider?: 'gmail' | 'outlook' | string
+}
+
+export const startInboundAuth = (connId: string, clientId?: string) =>
+  request<InboundAuthState>(`/api/inbound-auth/${encodeURIComponent(connId)}/start`, {
+    method: 'POST',
+    body: JSON.stringify({ client_id: clientId ?? '' }),
+  })
+
+export const getInboundAuthStatus = (connId: string) =>
+  request<InboundAuthState>(`/api/inbound-auth/${encodeURIComponent(connId)}/status`)
+
+export const clearInboundAuthStatus = (connId: string) =>
+  request<void>(`/api/inbound-auth/${encodeURIComponent(connId)}/status`, { method: 'DELETE' })
+
+export const resetInboundAuth = (connId: string) =>
+  request<{ reset: boolean }>(`/api/inbound-auth/${encodeURIComponent(connId)}/reset-auth`, { method: 'POST' })
+
+export const syncInboundConnection = (connId: string) =>
+  request<{ status: string; provider: string; processed?: number }>(`/api/inbound-auth/${encodeURIComponent(connId)}/sync`, {
+    method: 'POST',
+  })

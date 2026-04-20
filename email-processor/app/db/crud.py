@@ -21,6 +21,7 @@ def create_rule(db: Session, rule: RuleCreate) -> Rule:
         name=rule.name,
         enabled=rule.enabled,
         match=rule.match,
+        folder=rule.folder,
         conditions=[c.model_dump() for c in rule.conditions],
         actions=[a.model_dump() for a in rule.actions],
     )
@@ -162,18 +163,19 @@ def get_connection(db: Session, conn_id: str) -> Connection | None:
     return db.query(Connection).filter(Connection.id == conn_id).first()
 
 
-def create_connection(db: Session, conn_id: str, conn_type: str, fields: dict) -> Connection:
-    conn = Connection(id=conn_id, type=conn_type, fields=fields)
+def create_connection(db: Session, conn_id: str, direction: str, conn_type: str, fields: dict) -> Connection:
+    conn = Connection(id=conn_id, direction=direction, type=conn_type, fields=fields)
     db.add(conn)
     db.commit()
     db.refresh(conn)
     return conn
 
 
-def update_connection(db: Session, conn_id: str, conn_type: str, fields: dict) -> Connection | None:
+def update_connection(db: Session, conn_id: str, direction: str, conn_type: str, fields: dict) -> Connection | None:
     conn = get_connection(db, conn_id)
     if not conn:
         return None
+    conn.direction = direction
     conn.type = conn_type
     conn.fields = fields
     db.commit()
@@ -197,11 +199,12 @@ def seed_connections_from_yaml(db: Session, yaml_connections: list[dict]) -> int
     count = 0
     for c in yaml_connections:
         conn_id = c.get("id", "").strip()
+        direction = c.get("direction", "").strip() or ("inbound" if c.get("type") in {"gmail", "outlook", "outlook365"} else "outbound")
         conn_type = c.get("type", "").strip()
         if not conn_id or not conn_type:
             continue
-        fields = {k: v for k, v in c.items() if k not in ("id", "type")}
-        db.add(Connection(id=conn_id, type=conn_type, fields=fields))
+        fields = {k: v for k, v in c.items() if k not in ("id", "direction", "type")}
+        db.add(Connection(id=conn_id, direction=direction, type=conn_type, fields=fields))
         count += 1
     db.commit()
     return count
